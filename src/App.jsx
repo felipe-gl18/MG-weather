@@ -5,12 +5,70 @@ import "./App.css";
 import { mgCities } from "./services/mg-cities";
 import { tempoSiglas } from "./services/tempo";
 
+import { fetchWeatherApi } from "openmeteo";
+import { ChartTemperature } from "./components/Chart";
+
+import "leaflet/dist/leaflet.css";
+import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
+
 function App() {
-  const [buttonOpen, setButtonOpen] = useState(true);
   const [citiesData, setCitiesData] = useState([]);
   const [citiesWithWeatherData, SetCitiesWithWeatherData] = useState([]);
 
+  const [forecast, setForecast] = useState([]);
   const [data, setData] = useState([]);
+
+  const params = {
+    latitude: -19.9208,
+    longitude: -43.9378,
+    hourly: ["temperature_2m", "rain"],
+    timezone: "auto",
+  };
+  const url = "https://api.open-meteo.com/v1/forecast";
+
+  const handleWeatherAPI = async () => {
+    let responses = await fetchWeatherApi(url, params);
+
+    console.log(responses);
+    const range = (start, stop, step) =>
+      Array.from({ length: (stop - start) / step }, (_, i) => start + i * step);
+
+    const response = responses[0];
+
+    // Attributes for timezone and location
+    const utcOffsetSeconds = response.utcOffsetSeconds();
+    const timezone = response.timezone();
+    const timezoneAbbreviation = response.timezoneAbbreviation();
+    const latitude = response.latitude();
+    const longitude = response.longitude();
+
+    const hourly = response.hourly();
+
+    // Note: The order of weather variables in the URL query and the indices below need to match!
+    const weatherData = {
+      hourly: {
+        time: range(
+          Number(hourly.time()),
+          Number(hourly.timeEnd()),
+          hourly.interval()
+        ).map((t) => new Date((t + utcOffsetSeconds) * 1000)),
+        temperature2m: hourly.variables(0).valuesArray(),
+        rain: hourly.variables(1).valuesArray(),
+      },
+    };
+    let finalResult = [];
+
+    // `weatherData` now contains a simple structure with arrays for datetime and weather data
+    for (let i = 0; i < weatherData.hourly.time.length; i++) {
+      finalResult.push({
+        date: weatherData.hourly.time[i].toISOString(),
+        temparature: weatherData.hourly.temperature2m[i].toFixed(1),
+        rain: weatherData.hourly.rain[i],
+      });
+    }
+
+    setData(finalResult);
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -118,13 +176,48 @@ function App() {
       // Aguarda 3 segundos antes de disparar a ação
       const timeoutId = setTimeout(() => {
         // Sua ação aqui
-        setButtonOpen(false);
+        console.log("Ação após 3 segundos");
       }, 3000);
 
       // Certifique-se de limpar o timeout se o componente for desmontado
       return () => clearTimeout(timeoutId);
     }
   }, [citiesWithWeatherData]);
+
+  useEffect(() => {
+    console.log(data);
+    const offsetMinutos = new Date().getTimezoneOffset();
+
+    // Cria a instância de Date com o fuso horário local
+    const minhaData = new Date(Date.now() - offsetMinutos * 60 * 1000);
+
+    minhaData.setMinutes(0, 0, 0);
+    const forecastTemp = [];
+    // Formata a data como uma string se necessário
+
+    for (let i = 0; i < 7; i++) {
+      const dataFormatada = minhaData.toISOString(); // Isso já retorna a data no formato "2023-12-23T23:42:02.000Z"
+
+      let valueOfCurrentDate = data.filter(
+        (data) => data.date == dataFormatada
+      );
+      forecastTemp.push(valueOfCurrentDate[0]);
+
+      minhaData.setDate(minhaData.getDate() + 1);
+    }
+
+    setForecast(forecastTemp);
+  }, [data]);
+
+  useEffect(() => {
+    forecast.map((data) => {
+      console.log(new Date(data?.date).getDate());
+    });
+  }, [forecast]);
+
+  useEffect(() => {
+    handleWeatherAPI();
+  }, []);
 
   return (
     <div
@@ -133,218 +226,39 @@ function App() {
         flexDirection: "column",
         justifyContent: "center",
         alignItems: "center",
+        width: "100vw",
+        height: "100vh",
       }}
     >
-      <div>
-        <button
-          disabled={buttonOpen}
-          onClick={() => {
-            handleDadosDaCidade();
-          }}
-        >
-          Carregar dados do clima{" "}
-        </button>
-      </div>
-      <div
-        style={{
-          height: "50vh",
-          overflowY: "scroll",
-          marginTop: 100,
-          width: "80vw",
-        }}
+      <MapContainer
+        center={[-19.9208, -43.9378]}
+        zoom={13}
+        scrollWheelZoom={false}
+        style={{ width: "100%", height: "100%" }}
       >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            padding: "0px 10px 0px 10px",
-          }}
-        >
-          <p
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              fontWeight: "bold",
-              fontSize: "1.2rem",
-              color: "lightgreen",
-              alignItems: "center",
-              width: 220,
-            }}
-          >
-            Nome da Cidade
-          </p>
-          <p
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              fontWeight: "bold",
-              fontSize: "1.2rem",
-              color: "lightgreen",
-              alignItems: "center",
-              width: 120,
-            }}
-          >
-            Estado
-          </p>
-          <p
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              fontWeight: "bold",
-              fontSize: "1.2rem",
-              color: "lightgreen",
-              alignItems: "center",
-              width: 120,
-            }}
-          >
-            ID
-          </p>
-          <p
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              fontWeight: "bold",
-              fontSize: "1.2rem",
-              color: "lightgreen",
-              alignItems: "center",
-              width: 120,
-            }}
-          >
-            Previsão 1
-          </p>
-          <p
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              fontWeight: "bold",
-              fontSize: "1.2rem",
-              color: "lightgreen",
-              alignItems: "center",
-              width: 120,
-            }}
-          >
-            Previsão 2
-          </p>
-          <p
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              fontWeight: "bold",
-              fontSize: "1.2rem",
-              color: "lightgreen",
-              alignItems: "center",
-              width: 120,
-            }}
-          >
-            Previsão 3
-          </p>
-          <p
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              fontWeight: "bold",
-              fontSize: "1.2rem",
-              color: "lightgreen",
-              width: 120,
-            }}
-          >
-            Previsão 4
-          </p>
-        </div>
-        {data.length != 0
-          ? data.map((data, index) => {
-              return (
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    padding: "0px 10px 0px 10px",
-                  }}
-                  key={index}
-                >
-                  <p
-                    style={{
-                      color: "white",
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      width: 220,
-                    }}
-                  >
-                    {data[0]?.name}
-                  </p>
-                  <p
-                    style={{
-                      color: "white",
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      width: 120,
-                    }}
-                  >
-                    {data[0]?.state}
-                  </p>
-                  <p
-                    style={{
-                      color: "white",
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      width: 120,
-                    }}
-                  >
-                    {data[0]?.id}
-                  </p>
-                  <p
-                    style={{
-                      color: "white",
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      width: 120,
-                    }}
-                  >
-                    {`${data[0]?.weather[0].date}: ${data[0]?.weather[0].tempo}`}
-                  </p>
-                  <p
-                    style={{
-                      color: "white",
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      width: 120,
-                    }}
-                  >
-                    {`${data[0]?.weather[1].date}: ${data[0]?.weather[1].tempo}`}
-                  </p>
-                  <p
-                    style={{
-                      color: "white",
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      width: 120,
-                    }}
-                  >
-                    {`${data[0]?.weather[2].date}: ${data[0]?.weather[2].tempo}`}
-                  </p>
-                  <p
-                    style={{
-                      color: "white",
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      width: 120,
-                    }}
-                  >
-                    {`${data[0]?.weather[3].date}: ${data[0]?.weather[3].tempo}`}
-                  </p>
-                </div>
-              );
-            })
-          : null}
-      </div>
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <Marker position={[-19.9208, -43.9378]}>
+          <Popup>
+            <div
+              style={{
+                color: "black",
+                borderRadius: "10px",
+              }}
+            >
+              <div style={{ display: "flex", gap: 20 }}>
+                <p>Belo Horizonte - MG</p>
+                <p>{forecast[0]?.temparature} °C</p>
+                <p>chuva (mm): {forecast[0]?.rain}</p>
+              </div>
+              <p>Previsão de sete dias</p>
+              <ChartTemperature forecast={forecast} />
+            </div>
+          </Popup>
+        </Marker>
+      </MapContainer>
     </div>
   );
 }
